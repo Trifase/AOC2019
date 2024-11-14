@@ -42,17 +42,6 @@ with Timer(name="Parsing", text="Parsing.....DONE: {microseconds:.0f} µs"):
     data_first_line = data[0].split(",")
     data = [int(x) for x in data_first_line]
 
-instruction_length = {
-    1: 4,
-    2: 4,
-    3: 2,
-    4: 2,
-    5: 3,
-    6: 3,
-    7: 4,
-    8: 4,
-    99: 0
-}
 
 @dataclass
 class Opcode:
@@ -61,16 +50,27 @@ class Opcode:
     mode2: int
     mode3: int
     length: int
+    
+    instruction_length = {
+        1: 4,
+        2: 4,
+        3: 2,
+        4: 2,
+        5: 3,
+        6: 3,
+        7: 4,
+        8: 4,
+        99: 0,
+    }
 
     def __init__(self, opcode):
-        #5 length lefpadding 
-        opcode = str(opcode).zfill(5)
+        opcode = str(opcode).zfill(5)  # 5 length lefpadding
         self.opcode = int(opcode[3:])
         # position = 0, immediate = 1
         self.m1 = int(opcode[2])
         self.m2 = int(opcode[1])
         self.m3 = int(opcode[0])
-        self.length = instruction_length[self.opcode]
+        self.length = self.instruction_length[self.opcode]
 
     def __repr__(self):
         return f"Opcode: {self.opcode} - Mode1: {self.m1} - Mode2: {self.m2} - Mode3: {self.m3} - Length: {self.length}"
@@ -78,40 +78,44 @@ class Opcode:
 
 def process_instruction(data, opcode, instruction, input_value):
     output_value = None
+    a = 0
+    b = 0
+    if opcode.opcode not in [3, 4, 99]:
+        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
+        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
+
     if opcode.opcode == 1:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
         data[instruction[3]] = a + b
+
     elif opcode.opcode == 2:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
         data[instruction[3]] = a * b
+
     elif opcode.opcode == 3:
         data[instruction[1]] = input_value
-    elif opcode.opcode == 4:
-        # print(f"Setting Output: {data[instruction[1]]}")
+
+    elif opcode.opcode == 4:  # outputs a new value
         output_value = data[instruction[1]]
-    elif opcode.opcode == 5:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
+        return data, output_value, None
+
+    elif opcode.opcode == 5:  # returns a new cursor
         if a != 0:
             return data, None, b
-    elif opcode.opcode == 6:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
+
+    elif opcode.opcode == 6:  # returns a new cursor
         if a == 0:
             return data, None, b
+
     elif opcode.opcode == 7:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
         data[instruction[3]] = 1 if a < b else 0
+
     elif opcode.opcode == 8:
-        a = data[instruction[1]] if opcode.m1 == 0 else instruction[1]
-        b = data[instruction[2]] if opcode.m2 == 0 else instruction[2]
         data[instruction[3]] = 1 if a == b else 0
-    elif opcode.opcode == 99:
-        return None, None, None 
-    return data, output_value, None
+
+    elif opcode.opcode == 99:  # stops
+        return None, None, None
+
+    return data, None, None  # returns the new data
+
 
 def parse_data(data, cursor, input_value):
     final_output_value = None
@@ -120,21 +124,18 @@ def parse_data(data, cursor, input_value):
     while data is not None:
         # print(f"Cursor: {cursor}")
         opcode = Opcode(data[cursor])
-        instruction = data[cursor:cursor+opcode.length]
+        instruction = data[cursor : cursor + opcode.length]
         # print(f"Instruction: {instruction}")
         # print(f"Opcode: {opcode}")
         cursor += opcode.length
         # print(f"Next Cursor: {cursor}")
         # print()
         data, output_value, new_cursor = process_instruction(data, opcode, instruction, input_value)
-        if new_cursor is not None: # Jump (5, 6)
+        if new_cursor is not None:  # Jump (5, 6)
             cursor = new_cursor
-        if output_value is not None: # Output (4)
+        if output_value is not None:  # Output (4)
             final_output_value = output_value
     return final_output_value
-
-
-
 
 
 # Part 1
@@ -145,6 +146,7 @@ def part1(data: any) -> int:
     input_value = 1
     sol1 = parse_data(data1, 0, input_value)
     return sol1
+
 
 # Part 2
 @Timer(name="Part 2", text="Part 2......DONE: {microseconds:.0f} µs")
